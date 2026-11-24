@@ -45,6 +45,25 @@ void pce_psg_queue(uint8_t reg, uint8_t val)
 	pce_snd_push((pce_line_abs << 10) + sub, reg, val);
 }
 
+void pce_psg_restore(void)
+{
+	pce_psg_queue(1, PCE.PSG.volume);
+	for (int c = 0; c < 6; c++) {
+		const psg_chan_t *h = &PCE.PSG.chan[c];
+		pce_psg_queue(0, (uint8_t)c);
+		pce_psg_queue(4, 0x40);
+		pce_psg_queue(4, 0x00);
+		for (int i = 0; i < 32; i++) pce_psg_queue(6, h->wave_data[i]);
+		for (int i = 0; i < (h->wave_index & 31); i++) pce_psg_queue(6, h->wave_data[i]);
+		pce_psg_queue(2, h->freq_lsb);
+		pce_psg_queue(3, h->freq_msb);
+		pce_psg_queue(5, h->balance);
+		pce_psg_queue(7, h->noise_ctrl);
+		pce_psg_queue(4, h->control);
+	}
+	pce_psg_queue(0, PCE.PSG.ch);
+}
+
 int pce_screen_width(void) { return (int)PCE.VDC.screen_width; }
 int pce_screen_height(void) { return (int)PCE.VDC.screen_height; }
 uint8_t pce_bg_pix(void) { return PCE.Palette[0]; }

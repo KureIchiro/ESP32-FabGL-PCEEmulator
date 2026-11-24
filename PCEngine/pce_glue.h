@@ -13,6 +13,7 @@ extern uint8_t pce_vga_sync;
 extern volatile uint8_t pce_pad;
 void *pce_alloc(size_t size, int internal_first);
 void pce_psg_queue(uint8_t reg, uint8_t val);
+void pce_psg_restore(void);
 int  pce_screen_width(void);
 int  pce_screen_height(void);
 uint8_t pce_bg_pix(void);

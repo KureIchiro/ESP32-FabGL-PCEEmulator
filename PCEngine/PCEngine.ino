@@ -38,6 +38,10 @@
  *  ・PSRAM の画面バッファに描いて次のフレームで写す方式と、その画面バッファを外した
  *  ・計測用の表示(RENDER・PARTS の行)を外した(SPEED の行はほかの機種と同じく残す)
  *  ・ROM の一覧のいちばん上の行で、ボタン1・2 の配置(I II / II I)を選べるようにした(/PCE/PAD.CFG に保存)
+ *  2026-11-24 足した・直した。
+ *  ・ステートセーブ: F9 / F10 / F11 でスロット 2 / 1 / 0 を読み込み、Shift を押しながらで保存(/PCE/SAVE)。
+ *    pce-go の SaveState / LoadState を使い、読み込んだあと PSG のレジスタを音の側へ送り直す(pce_glue.c)
+ *  ・3M ビットのカードを 4M ビットに水増ししたファイルを、3M ビットのカードと同じ並びで読む(pce-go.c。Rabio Lepus)
  *
  * 【必要なファイル（SDカード）】
  *  /PCE/ROM の .pce : HuCARD の ROM(フォルダに分けてもよい)。起動すると一覧が出る
@@ -46,6 +50,7 @@
  *  キーボード: ↑↓←→ = 方向、Z = I、X = II、Space = SELECT、Enter = RUN(方向と I・II は MARK III 版と同じ)
  *  コントローラ(Serial1。1P 専用・4 ボタン): 方向、ボタン1 = I、ボタン2 = II、ボタン3 = SELECT(MODE)、ボタン4 = RUN(START)
  *  F12: 一時停止 / 再開。Shift+F12: リセット(ESP32 ごと。ROM の一覧に戻る)
+ *  F9 / F10 / F11: ステートのスロット 2 / 1 / 0 を読み込む。Shift+F9 / F10 / F11: 保存
  *  ROM の一覧で TAB / ボタン3: 次に起動する機種(EmuLauncher を使うときだけ)
  * ============================================================================
  */
@@ -205,6 +210,16 @@ static void setKbdBit(uint8_t bit, bool down) {
 }
 
 static void showStatus(const char *msg);
+static volatile int stateReq = 0;
+static String romPath;
+static uint32_t statusUntil = 0;
+static char statusMsg[48];
+static void flashStatus(const char *msg, uint32_t ms) {
+  snprintf(statusMsg, sizeof(statusMsg), "%s", msg);
+  showStatus(msg);
+  statusUntil = millis() + ms;
+  if (!statusUntil) statusUntil = 1;
+}
 
 static void updateKeyboard() {
   static bool isBreak = false, isE0 = false;
@@ -232,6 +247,10 @@ static void updateKeyboard() {
       case 0x22: setKbdBit(padSwap ? JOY_A : JOY_B, down); break;
       case 0x5A: setKbdBit(JOY_RUN, down); break;
       case 0x29: setKbdBit(JOY_SELECT, down); break;
+      case 0x01: case 0x09: case 0x78:
+        if (!down) break;
+        stateReq = 0x10 | (sc == 0x01 ? 2 : sc == 0x09 ? 1 : 0) | (shiftDown ? 0x80 : 0);
+        break;
       case 0x07:
         if (!down) break;
         if (shiftDown) ESP.restart();
@@ -577,13 +596,36 @@ static void clearOutside(int h) {
 
 #define PCE_FRAME_US 16683
 
+static int clearedH = -1;
+static void doStateRequest(int req) {
+  const int slot = req & 0x0F;
+  const bool save = (req & 0x80) != 0;
+  String name = romPath.substring(romPath.lastIndexOf('/') + 1);
+  const int dot = name.lastIndexOf('.');
+  if (dot > 0) name = name.substring(0, dot);
+  const String path = String(PCE_DIR "/SAVE/") + name + "_" + String(slot) + ".sta";
+  const String vfs = String("/sd") + path;
+  char msg[40];
+  if (save) {
+    if (!SD.exists(PCE_DIR "/SAVE")) SD.mkdir(PCE_DIR "/SAVE");
+    snprintf(msg, sizeof(msg), SaveState(vfs.c_str()) == 0 ? "STATE %d SAVED" : "STATE %d SAVE ERROR", slot);
+  } else if (!SD.exists(path)) {
+    snprintf(msg, sizeof(msg), "NO STATE %d", slot);
+  } else if (LoadState(vfs.c_str()) == 0) {
+    pce_psg_restore();
+    clearedH = -1;
+    snprintf(msg, sizeof(msg), "STATE %d LOADED", slot);
+  } else snprintf(msg, sizeof(msg), "STATE %d LOAD ERROR", slot);
+  Serial.println(msg);
+  flashStatus(msg, 1000);
+}
+
 void cpuTask(void *pvParameters) {
   const int64_t frameTimeUs = PCE_FRAME_US;
   int64_t nextFrameTime = esp_timer_get_time();
   bool renderSkipped = false;
   bool gaveUp = false;
   bool noWait = false, prevNoWait = false;
-  int clearedH = -1;
 
 #ifdef USE_SERIAL_DEBUG
   int64_t dbgMin = INT64_MAX, dbgMax = 0, dbgSum = 0, dbgWinStart = 0, dbgIdle = 0;
@@ -592,6 +634,8 @@ void cpuTask(void *pvParameters) {
 
   while (1) {
     gfx_render_wait();
+    if (stateReq) { const int r = stateReq; stateReq = 0; doStateRequest(r); }
+    if (statusUntil && !isPaused) showStatus(statusMsg);
     if (isPaused) {
       cpuStopped = true;
       vTaskDelay(pdMS_TO_TICKS(10));
@@ -743,7 +787,7 @@ void setup() {
       canvas->setPenColor(fabgl::Color::BrightRed);
       canvas->drawText(8, 32, "ROM LOAD ERROR (MAX 4MB)");
       delay(1500);
-    } else Serial.printf("ROM %s: %u bytes\n", path.c_str(), (unsigned)romSize);
+    } else { Serial.printf("ROM %s: %u bytes\n", path.c_str(), (unsigned)romSize); romPath = path; }
   }
 
   canvas->setBrushColor(fabgl::Color::Black);
@@ -770,6 +814,12 @@ void setup() {
   xTaskCreatePinnedToCore(cpuTask, "cpuTask", 8192, NULL, 24, NULL, 0);
 }
 
+static void statusTick() {
+  if (!statusUntil || isPaused || (int32_t)(millis() - statusUntil) < 0) return;
+  statusUntil = 0;
+  clearedH = -1;
+}
+
 void loop() {
   if (pce_render_async) {
     static int64_t lastFill = 0;
@@ -781,6 +831,7 @@ void loop() {
     if (frameReady || isPaused) {
       frameReady = false;
       updateKeyboard();
+      statusTick();
     }
     return;
   }
@@ -788,6 +839,7 @@ void loop() {
   if (frameReady || isPaused) {
     frameReady = false;
     updateKeyboard();
+    statusTick();
   }
   vTaskDelay(1);
 }

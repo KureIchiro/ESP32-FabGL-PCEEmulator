@@ -161,6 +161,19 @@ LoadCard(uint8_t *data, size_t size)
 	if (romFlags[IDX].Flags & TWO_PART_ROM)
 		PCE.ROM_SIZE = 0x30;
 
+	/* 2026-11-24 (GPLv3 section 5a) PCEngine for TTGO VGA32: a 3 Mbit card dumped as 4 Mbit (its 1 Mbit part
+	   repeated in banks 30h-3Fh, maybe with a few patched bytes) gets the same two-part map as TWO_PART_ROM
+	   (the CRC table above is not used here: crc32_le gives 0). Rabio Lepus Special reads bank 4Ch. */
+	if (PCE.ROM_SIZE == 0x40) {
+		size_t diff = 0;
+		for (size_t x = 0; x < 0x20000 && diff <= 64; x++)
+			diff += PCE.ROM_DATA[0x40000 + x] != PCE.ROM_DATA[0x60000 + x];
+		if (diff <= 64) {
+			MESSAGE_INFO("3 Mbit card in a 4 Mbit file: two-part map\n");
+			PCE.ROM_SIZE = 0x30;
+		}
+	}
+
 	// Game ROM
 	for (int i = 0; i < 0x80; i++) {
 		if (PCE.ROM_SIZE == 0x30) {

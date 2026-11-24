@@ -50,6 +50,7 @@ Like the other emulators in this collection, this sketch as a whole is distribut
 
 - **Controller**: player 1 only, 4 buttons. The adapter on Serial1 sends one byte at a time as on the other machines (0 = pressed; bit 0–3 = up/down/left/right, bit 4–6 = buttons 1–3), but bit 7 is button 4 here (the other machines use bit 7 to tell player 1 from player 2), so the adapter must be in its 1-controller 4-button mode.
 - **F12**: pause / resume. **Shift + F12**: reset (restarts the ESP32 and goes back to the ROM list).
+- **F9 / F10 / F11**: load state slot 2 / 1 / 0. **Shift + F9 / F10 / F11**: save the state to that slot (`/PCE/SAVE/<ROM name>_<slot>.sta` on the SD card). The sound restarts from the next note after a load.
 - **ROM list**: Up/Down = select, PageUp/PageDown = page, Enter = start / open the folder, BackSpace or ESC = folder up. With the controller: up/down = select, left/right = page (hold left/right briefly while up/down is not pressed), button 1 or 4 = Enter, button 2 = folder up. TAB (controller button 3) = machine to start next (only with EmuLauncher).
 - **Button layout**: each Enter on the top row of the ROM list (BUTTON 1 2 = …) swaps buttons 1 and 2 (keyboard Z and X) between I II and II I. It is saved to `/PCE/PAD.CFG` on the SD card. SELECT and RUN do not change.
 
@@ -123,6 +124,7 @@ LILYGO TTGO VGA32(ESP32 + FabGL)用の PC エンジン(HuCARD)のエミュレー
 
 - **コントローラ**: 1P 専用・4 ボタンです。Serial1 のアダプタからはほかの機種と同じく 1 バイトずつ届きます(0 = 押下。bit0〜3 = 上下左右、bit4〜6 = ボタン 1〜3)が、この機種では bit7 がボタン 4 です(ほかの機種は bit7 で 1P と 2P を分けています)。アダプタは 1 コン 4 ボタンのモードにしてください。
 - **F12**: 一時停止 / 再開。**Shift + F12**: リセット(ESP32 ごと再起動して ROM の一覧に戻る)。
+- **F9 / F10 / F11**: ステートのスロット 2 / 1 / 0 を読み込む。**Shift + F9 / F10 / F11**: そのスロットへ保存(SD カードの `/PCE/SAVE/<ROM の名前>_<スロット>.sta`)。読み込んだあとの音は、次の音から鳴ります。
 - **ROM の一覧**: ↑↓ = 選ぶ、PageUp / PageDown = ページ、Enter = 起動 / フォルダに入る、BackSpace か ESC = 上のフォルダ。コントローラは上下 = 選ぶ、左右 = ページ(上下を押していないときに左右を少し押し続ける)、ボタン1 か 4 = Enter、ボタン2 = 上のフォルダ。TAB(コントローラはボタン 3)= 次に起動する機種(EmuLauncher を使うときだけ)。
 - **ボタンの配置**: ROM の一覧のいちばん上の行(BUTTON 1 2 = …)で Enter を押すたびに、ボタン 1・2(キーボードの Z・X)が I II と II I で入れ替わります。SD の `/PCE/PAD.CFG` に保存されます。SELECT・RUN は変わりません。
 
