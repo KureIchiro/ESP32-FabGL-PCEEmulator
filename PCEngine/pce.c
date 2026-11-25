@@ -244,6 +244,10 @@ pce_readIO(uint16_t A)
 		case 0:
 			ret = PCE.VDC.status;
 			PCE.VDC.status = 0;
+			/* 2026-11-25 (GPLv3 section 5a) PCEngine for TTGO VGA32: reading the status acknowledges the VDC
+			   interrupt. Before, only taking the interrupt lowered the line, so a game that masks IRQ1 and polls
+			   the status for the vertical blank (Dungeon Explorer after RUN) never saw the next one. */
+			CPU.irq_lines &= ~INT_IRQ1;
 			break;
 		case 1:
 			ret = 0;
