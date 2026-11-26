@@ -267,13 +267,18 @@ h6280_run(int max_cycles)
 	regs_load(R);
 
 	/* Handle pending interrupts (Should be in the loop, but it's too slow) */
+	/* 2026-11-26 (GPLv3 section 5a) PCEngine for TTGO VGA32: a pending interrupt is taken after one instruction
+	   (the pass with limit = Cycles + 1), not before it. The VDC raises its interrupt between two runs, and a game that
+	   polls the VDC status with the interrupt enabled (Dungeon Explorer on the title after button I: LDA #$20 /
+	   BIT $0000 / BEQ) never saw the flag, because the handler always read (and cleared) it first. On the real chip
+	   it is a race the polling loop wins every few frames; now it can win when its BIT comes first. */
 	unsigned irq = GCPU.irq_lines & ~GCPU.irq_mask & INT_MASK;
-	if ((CPU.P & FL_I) == 0 && irq) {
-		interrupt(R, irq);
-	}
+	int pend = ((CPU.P & FL_I) == 0 && irq);
+	int limit = pend ? Cycles + 1 : max_cycles;
 
+again:
 	/* Run for roughly one scanline */
-	while (Cycles < max_cycles)
+	while (Cycles < limit)
 	{
 		UBYTE opcode = imm_operand(CPU.PC);
 
@@ -536,6 +541,15 @@ h6280_run(int max_cycles)
 				MESSAGE_DEBUG("Illegal opcode 0x%02X at pc=0x%04X!\n", opcode, CPU.PC);
 				nop(R);
 		}
+	}
+	if (pend) {
+		pend = 0;
+		irq = GCPU.irq_lines & ~GCPU.irq_mask & INT_MASK;
+		if ((CPU.P & FL_I) == 0 && irq) {
+			interrupt(R, irq);
+		}
+		limit = max_cycles;
+		goto again;
 	}
 
 	regs_store(R);
